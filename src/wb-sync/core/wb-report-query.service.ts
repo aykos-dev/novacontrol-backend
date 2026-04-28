@@ -45,12 +45,13 @@ export class WbReportQueryService {
 
     const dailyMap = new Map<
       string,
-      { income: number; expenses: number }
+      { income: number; expenses: number; balance_change: number }
     >();
 
     let totalIncome = 0;
     let totalExpenses = 0;
     let totalRetailSales = 0;
+    let totalBalanceChange = 0;
     const breakdown = {
       retail_sales: 0,
       ppvz_reward: 0,
@@ -95,14 +96,31 @@ export class WbReportQueryService {
         acceptance +
         rebill_logistic_cost;
 
-      const entry = dailyMap.get(date) ?? { income: 0, expenses: 0 };
+      // «Изменение баланса»: net effect on seller's WB balance for this row.
+      // ppvz_for_pay is already net of WB commission and acquiring fee.
+      const rowBalanceChange =
+        ppvz_for_pay -
+        delivery_rub -
+        storage_fee -
+        penalty -
+        deduction -
+        acceptance -
+        rebill_logistic_cost;
+
+      const entry = dailyMap.get(date) ?? {
+        income: 0,
+        expenses: 0,
+        balance_change: 0,
+      };
       entry.income += income;
       entry.expenses += rowExpenses;
+      entry.balance_change += rowBalanceChange;
       dailyMap.set(date, entry);
 
       totalIncome += income;
       totalExpenses += rowExpenses;
       totalRetailSales += retailSales;
+      totalBalanceChange += rowBalanceChange;
 
       breakdown.retail_sales += retailSales;
       breakdown.ppvz_reward += ppvz_reward;
@@ -118,6 +136,7 @@ export class WbReportQueryService {
       date,
       income: Math.round(vals.income * 100) / 100,
       expenses: Math.round(vals.expenses * 100) / 100,
+      balance_change: Math.round(vals.balance_change * 100) / 100,
     }));
 
     return {
@@ -126,6 +145,7 @@ export class WbReportQueryService {
         income: Math.round(totalIncome * 100) / 100,
         expenses: Math.round(totalExpenses * 100) / 100,
         retail_sales: Math.round(totalRetailSales * 100) / 100,
+        balance_change: Math.round(totalBalanceChange * 100) / 100,
       },
       breakdown: {
         retail_sales: Math.round(breakdown.retail_sales * 100) / 100,

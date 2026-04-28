@@ -195,7 +195,7 @@ export class TelegramService {
       '🚨 Внимание! Низкий баланс',
       '',
       `👤 Клиент: ${data.clientName}`,
-      `💰 Текущий баланс: ${this.formatNumber(data.currentBalance)} ${data.currency}`,
+      `💰 Текущие расходы: ${this.formatNumber(data.currentBalance)} ${data.currency}`,
       `⚠️ Порог: ${this.formatNumber(data.threshold)} ${data.currency}`,
       `📉 Баланс ниже порога на: ${this.formatNumber(deficit)} ${data.currency}`,
       '',

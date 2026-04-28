@@ -34,7 +34,10 @@ export class AlertsService {
 
     const { totalExpenses } = await this.expenseRepo
       .createQueryBuilder('e')
-      .select('COALESCE(SUM(e.amount), 0)', 'totalExpenses')
+      .select(
+        'COALESCE(SUM(COALESCE(e.amount_kgs, CAST(e.amount AS DECIMAL))), 0)',
+        'totalExpenses',
+      )
       .where('e.client_id = :clientId', { clientId })
       .andWhere('e.deleted_at IS NULL')
       .getRawOne();

@@ -7,6 +7,11 @@ import { CreateExpenseDto } from './dto/create-expense.dto.js';
 import { UpdateExpenseDto } from './dto/update-expense.dto.js';
 import { ExpenseCategoriesService } from './expense-categories.service.js';
 import { AlertsService } from '../alerts/alerts.service.js';
+import { roundKgsAmountUsdTimesRate } from './fx.utils.js';
+
+/** Summaries mix with WB rows in KGS: prefer computed column; legacy rows store amount as KGS when rate was absent. */
+export const EXPENSE_KGS_SUM_SQL =
+  'COALESCE(expense.amount_kgs, CAST(expense.amount AS DECIMAL))';
 
 @Injectable()
 export class ExpensesService {
@@ -77,11 +82,18 @@ export class ExpensesService {
   async create(dto: CreateExpenseDto, userId: string): Promise<ExtraExpense> {
     await this.expenseCategoriesService.assertActiveCategoryId(dto.category_id);
 
+    const amountKgs = roundKgsAmountUsdTimesRate(
+      dto.amount,
+      dto.exchange_rate_kgs_per_usd,
+    );
+
     const expense = this.expenseRepo.create({
       client_id: dto.client_id,
       expense_date: dto.expense_date,
       category_id: dto.category_id,
       amount: String(dto.amount),
+      exchange_rate_kgs_per_usd: String(dto.exchange_rate_kgs_per_usd),
+      amount_kgs: amountKgs,
       currency: dto.currency ?? 'USD',
       note: dto.note ?? null,
       created_by: userId,
@@ -131,9 +143,31 @@ export class ExpensesService {
     }
     if (dto.client_id !== undefined) expense.client_id = dto.client_id;
     if (dto.expense_date !== undefined) expense.expense_date = dto.expense_date;
-    if (dto.amount !== undefined) expense.amount = String(dto.amount);
     if (dto.currency !== undefined) expense.currency = dto.currency;
     if (dto.note !== undefined) expense.note = dto.note;
+
+    const mergedAmt =
+      dto.amount !== undefined ? dto.amount : Number(expense.amount);
+    const mergedRateRaw =
+      dto.exchange_rate_kgs_per_usd !== undefined
+        ? dto.exchange_rate_kgs_per_usd
+        : expense.exchange_rate_kgs_per_usd != null
+          ? Number(expense.exchange_rate_kgs_per_usd)
+          : undefined;
+
+    if (
+      dto.amount !== undefined ||
+      dto.exchange_rate_kgs_per_usd !== undefined
+    ) {
+      if (mergedRateRaw != null && mergedRateRaw > 0) {
+        expense.amount = String(mergedAmt);
+        expense.exchange_rate_kgs_per_usd = String(mergedRateRaw);
+        expense.amount_kgs = roundKgsAmountUsdTimesRate(
+          mergedAmt,
+          mergedRateRaw,
+        );
+      }
+    }
 
     await this.expenseRepo.save(expense);
     const reloaded = await this.expenseRepo.findOne({
@@ -167,7 +201,9 @@ export class ExpensesService {
       total: number;
       currency: string;
     }[];
+    /** Sum of expense equivalents in KGS (WB mixing currency). */
     grandTotal: number;
+    grandTotalKgs: number;
   }> {
     const qb = this.expenseRepo
       .createQueryBuilder('expense')
@@ -177,14 +213,12 @@ export class ExpensesService {
       .addSelect('cat.name', 'name')
       .addSelect('cat.color', 'color')
       .addSelect('cat.icon_emoji', 'icon_emoji')
-      .addSelect('expense.currency', 'currency')
-      .addSelect('SUM(expense.amount)', 'total')
+      .addSelect(`SUM(${EXPENSE_KGS_SUM_SQL})`, 'total')
       .groupBy('cat.id')
       .addGroupBy('cat.slug')
       .addGroupBy('cat.name')
       .addGroupBy('cat.color')
-      .addGroupBy('cat.icon_emoji')
-      .addGroupBy('expense.currency');
+      .addGroupBy('cat.icon_emoji');
 
     if (clientId) {
       qb.andWhere('expense.client_id = :clientId', { clientId });
@@ -205,7 +239,6 @@ export class ExpensesService {
       color: string | null;
       icon_emoji: string | null;
       total: string;
-      currency: string;
     }[] = await qb.getRawMany();
 
     const byCategory = rows.map((r) => ({
@@ -215,12 +248,60 @@ export class ExpensesService {
       color: r.color,
       icon_emoji: r.icon_emoji,
       total: Number(r.total),
-      currency: r.currency,
+      currency: 'KGS',
     }));
 
     const grandTotal = byCategory.reduce((sum, r) => sum + r.total, 0);
 
-    return { byCategory, grandTotal };
+    return { byCategory, grandTotal, grandTotalKgs: grandTotal };
+  }
+
+  /**
+   * Net extra expenses (KGS) using same COALESCE(amount_kgs, amount) as summaries.
+   */
+  async sumExtraExpensesKgs(filters: {
+    expenseDate?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    clientIds?: string[];
+    createdByUserIds?: string[];
+  }): Promise<number> {
+    const qb = this.expenseRepo
+      .createQueryBuilder('expense')
+      .select(`COALESCE(SUM(${EXPENSE_KGS_SUM_SQL}), 0)`, 'total');
+
+    if (filters.expenseDate) {
+      qb.andWhere('expense.expense_date = :expenseDate', {
+        expenseDate: filters.expenseDate,
+      });
+    } else {
+      if (filters.dateFrom) {
+        qb.andWhere('expense.expense_date >= :dateFrom', {
+          dateFrom: filters.dateFrom,
+        });
+      }
+      if (filters.dateTo) {
+        qb.andWhere('expense.expense_date <= :dateTo', {
+          dateTo: filters.dateTo,
+        });
+      }
+    }
+
+    if (filters.clientIds?.length) {
+      qb.andWhere('expense.client_id IN (:...clientIds)', {
+        clientIds: filters.clientIds,
+      });
+    }
+
+    if (filters.createdByUserIds?.length) {
+      qb.andWhere('expense.created_by IN (:...uids)', {
+        uids: filters.createdByUserIds,
+      });
+    }
+
+    const row = await qb.getRawOne<{ total: string | null }>();
+    const n = Number(row?.total ?? 0);
+    return Math.round(n * 100) / 100;
   }
 
   async getDailyTotals(
@@ -231,7 +312,7 @@ export class ExpensesService {
     const qb = this.expenseRepo
       .createQueryBuilder('expense')
       .select('expense.expense_date', 'date')
-      .addSelect('SUM(expense.amount)', 'total')
+      .addSelect(`SUM(${EXPENSE_KGS_SUM_SQL})`, 'total')
       .where('expense.client_id = :clientId', { clientId })
       .groupBy('expense.expense_date')
       .orderBy('expense.expense_date', 'ASC');

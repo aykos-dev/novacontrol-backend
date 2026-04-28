@@ -24,9 +24,36 @@ export class BotInternalController {
     return { text };
   }
 
-  @Get('balance')
-  async balance(): Promise<{ text: string }> {
-    const text = await this.botService.buildBalanceText();
+  /** Net extra expenses (KGS) for a single calendar day. Defaults to today if date omitted. */
+  @Get('expense')
+  async expense(@Query('date') date?: string): Promise<{ text: string }> {
+    const text = await this.botService.buildExtraExpenseDayText(date?.trim());
+    return { text };
+  }
+
+  /** Comma-separated usernames; omit or empty = all users. Net extra expenses (KGS), all dates. */
+  @Get('userinfo')
+  async userinfo(@Query('users') users?: string): Promise<{ text: string }> {
+    const tokens = users
+      ? users
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const text = await this.botService.buildUserExpenseNetText(tokens);
+    return { text };
+  }
+
+  /** Comma-separated client name/id fragments; omit or empty = all clients. Net extra expenses (KGS), all dates. */
+  @Get('clientinfo')
+  async clientinfo(@Query('clients') clients?: string): Promise<{ text: string }> {
+    const tokens = clients
+      ? clients
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const text = await this.botService.buildClientExpenseNetText(tokens);
     return { text };
   }
 }

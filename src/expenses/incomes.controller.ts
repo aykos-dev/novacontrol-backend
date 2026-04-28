@@ -25,6 +25,24 @@ import { AdminRole } from '../users/admin-user.entity.js';
 export class IncomesController {
   constructor(private readonly incomesService: IncomesService) {}
 
+  @Get('summary')
+  getSummary(
+    @Query('clientId') clientId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.incomesService.getSummary(clientId, dateFrom, dateTo);
+  }
+
+  @Get('daily-totals')
+  getDailyTotals(
+    @Query('clientId') clientId: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.incomesService.getDailyTotals(clientId, dateFrom, dateTo);
+  }
+
   @Get()
   findAll(
     @Query('clientId') clientId?: string,

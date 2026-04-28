@@ -6,12 +6,19 @@ export type WbReportDailyRow = {
   date: string;
   income: number;
   expenses: number;
+  /** «Изменение баланса»: Σ((forPay − acquiring) − retail − charges) per rr_dt (same components as chart приход/расход). */
+  balance_change: number;
 };
 
 export type WbReportTotals = {
   income: number;
   expenses: number;
   retail_sales: number;
+  /**
+   * «Изменение баланса»: sum over rows of (forPay − acquiring − retail − row expenses).
+   * Differs from retail-based revenue (income − expenses).
+   */
+  balance_change: number;
 };
 
 export type WbReportBreakdown = {

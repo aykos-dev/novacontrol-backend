@@ -121,19 +121,19 @@ export class SchedulerService implements OnModuleInit {
         .innerJoin('e.expenseCategory', 'cat')
         .select('cat.name', 'name')
         .addSelect('cat.icon_emoji', 'icon_emoji')
-        .addSelect('e.currency', 'currency')
-        .addSelect('SUM(e.amount)', 'total')
+        .addSelect(
+          'SUM(COALESCE(e.amount_kgs, CAST(e.amount AS DECIMAL)))',
+          'total',
+        )
         .where('e.client_id = :clientId', { clientId: client.id })
         .andWhere('e.expense_date = :date', { date: dateStr })
         .groupBy('cat.id')
         .addGroupBy('cat.name')
         .addGroupBy('cat.icon_emoji')
-        .addGroupBy('e.currency')
         .getRawMany<{
           name: string;
           icon_emoji: string | null;
           total: string;
-          currency: string;
         }>();
 
       if (expenses.length === 0) {
@@ -146,7 +146,7 @@ export class SchedulerService implements OnModuleInit {
         return {
           categoryLabel: `${icon} ${e.name}`.trim(),
           amount: Number(e.total),
-          currency: e.currency,
+          currency: 'KGS',
         };
       });
 
@@ -157,7 +157,7 @@ export class SchedulerService implements OnModuleInit {
         clientName: client.name,
         expenses: expenseItems,
         total: clientTotal,
-        currency: expenseItems[0]?.currency ?? 'USD',
+        currency: expenseItems[0]?.currency ?? 'KGS',
       });
     }
 
@@ -181,7 +181,7 @@ export class SchedulerService implements OnModuleInit {
       date: dateStr,
       clientReports,
       grandTotal,
-      currency: 'USD',
+      currency: 'KGS',
     });
 
     this.logger.log('[daily-expense-report] finished (Telegram path completed)');

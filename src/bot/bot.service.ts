@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Client } from '../clients/client.entity.js';
+import { AdminUser } from '../users/admin-user.entity.js';
 import { WbSyncService } from '../wb-sync/wb-sync.service.js';
 import { ExpensesService } from '../expenses/expenses.service.js';
+import { IncomesService } from '../expenses/incomes.service.js';
 
 const WB_BREAKDOWN: {
   key:
@@ -30,8 +32,11 @@ export class BotService {
   constructor(
     private readonly wbSyncService: WbSyncService,
     private readonly expensesService: ExpensesService,
+    private readonly incomesService: IncomesService,
     @InjectRepository(Client)
     private readonly clientRepo: Repository<Client>,
+    @InjectRepository(AdminUser)
+    private readonly userRepo: Repository<AdminUser>,
   ) {}
 
   private fmt(n: number): string {
@@ -60,7 +65,7 @@ export class BotService {
   }
 
   /**
-   * Full /info and /report body (HTML-free plain text for Telegram).
+   * Full /report body (HTML-free plain text for Telegram).
    */
   async buildReportText(
     dateFrom: string,
@@ -93,6 +98,11 @@ export class BotService {
         dateFrom,
         dateTo,
       );
+      const incomeSummary = await this.incomesService.getSummary(
+        client.id,
+        dateFrom,
+        dateTo,
+      );
 
       const income = report.totals.income;
       const expTotal = report.totals.expenses;
@@ -112,32 +122,33 @@ export class BotService {
         lines.push(`${prefix} ${w.label}: ${this.negFmt(val)} KGS`);
       });
 
-      lines.push(`💰 Доход WB: ${this.fmt(wbNet)} KGS`);
+      lines.push(`💰 Доход WB (розница − сборы): ${this.fmt(wbNet)} KGS`);
+      const bc = report.totals.balance_change ?? 0;
+      lines.push(`⚖️ Изменение баланса WB: ${this.fmt(bc)} KGS`);
       lines.push('');
 
       if (summary.byCategory.length > 0) {
-        lines.push('📦 Доп. расходы:');
+        lines.push('📦 Доп. расходы (KGS):');
         for (const row of summary.byCategory) {
           const icon = row.icon_emoji ?? '📌';
           lines.push(
             `  ${icon} ${row.name}: ${this.fmt(row.total)} ${row.currency}`,
           );
         }
-        lines.push(
-          `💵 Итого расходов: ${this.fmt(summary.grandTotal)} ${
-            summary.byCategory[0]?.currency ?? 'USD'
-          }`,
-        );
+        lines.push(`💵 Итого доп. расходов: ${this.fmt(summary.grandTotal)} KGS`);
       } else {
         lines.push('📦 Доп. расходы: нет записей');
       }
 
       const extra = summary.grandTotal;
-      const cur0 = summary.byCategory[0]?.currency ?? 'USD';
+      const extraInc = incomeSummary.grandTotal;
+      if (extraInc > 0) {
+        lines.push(`📥 Доп. пополнения (KGS): ${this.fmt(extraInc)} KGS`);
+      }
+
+      const realRev = wbNet - extra + extraInc;
       lines.push('');
-      lines.push(
-        `✅ Реальный доход (WB−доп.): ${this.fmt(wbNet)} KGS − ${this.fmt(extra)} ${cur0} (валюты могут различаться)`,
-      );
+      lines.push(`✅ Реальный доход: ${this.fmt(realRev)} KGS`);
 
       blocks.push(lines.join('\n'));
       blocks.push('');
@@ -146,38 +157,119 @@ export class BotService {
     return blocks.join('\n').trimEnd();
   }
 
-  async buildBalanceText(): Promise<string> {
-    const clients = await this.clientRepo.find({
+  /** Net extra expenses (KGS) for one day; date defaults to UTC today (YYYY-MM-DD). */
+  async buildExtraExpenseDayText(dateArg?: string): Promise<string> {
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const date =
+      dateArg && re.test(dateArg)
+        ? dateArg
+        : new Date().toISOString().slice(0, 10);
+    const total = await this.expensesService.sumExtraExpensesKgs({
+      expenseDate: date,
+    });
+    return [
+      `📦 Доп. расходы за ${date}`,
+      `💵 Итого (нетто, KGS): ${this.fmt(total)}`,
+    ].join('\n');
+  }
+
+  /** Net extra expenses by creators; empty tokens = all users, all dates. */
+  async buildUserExpenseNetText(tokens: string[]): Promise<string> {
+    const allUsers = await this.userRepo.find({
+      where: { is_active: true },
+      order: { username: 'ASC' },
+    });
+
+    if (tokens.length === 0) {
+      const total = await this.expensesService.sumExtraExpensesKgs({});
+      return [
+        `👥 Все пользователи`,
+        `📦 Доп. расходы (все даты)`,
+        `💵 Итого (нетто, KGS): ${this.fmt(total)}`,
+      ].join('\n');
+    }
+
+    const matched = new Map<string, AdminUser>();
+    const notFound: string[] = [];
+    for (const raw of tokens) {
+      const t = raw.trim();
+      if (!t) continue;
+      const q = t.toLowerCase();
+      const hits = allUsers.filter(
+        (u) =>
+          u.username.toLowerCase() === q ||
+          u.username.toLowerCase().includes(q),
+      );
+      if (hits.length === 0) notFound.push(t);
+      else hits.forEach((u) => matched.set(u.id, u));
+    }
+
+    const lines: string[] = [];
+    if (notFound.length) {
+      lines.push(`⚠️ Не найдены: ${notFound.join(', ')}`);
+    }
+
+    if (matched.size === 0) {
+      return lines.join('\n').trimEnd() || 'Нет подходящих пользователей.';
+    }
+
+    const ids = [...matched.keys()];
+    const total = await this.expensesService.sumExtraExpensesKgs({
+      createdByUserIds: ids,
+    });
+
+    const names = [...matched.values()].map((u) => u.username).join(', ');
+    lines.unshift(`👥 ${names}`);
+    lines.push(`💵 Итого доп. расходов (KGS): ${this.fmt(total)}`);
+    return lines.join('\n');
+  }
+
+  /** Net extra expenses by clients; empty tokens = all clients, all dates. */
+  async buildClientExpenseNetText(tokens: string[]): Promise<string> {
+    const all = await this.clientRepo.find({
       where: { is_active: true },
       order: { name: 'ASC' },
     });
 
-    if (clients.length === 0) {
-      return 'Нет активных клиентов.';
+    if (tokens.length === 0) {
+      const total = await this.expensesService.sumExtraExpensesKgs({});
+      return [
+        `🏷️ Все клиенты`,
+        `📦 Доп. расходы (все даты)`,
+        `💵 Итого (нетто, KGS): ${this.fmt(total)}`,
+      ].join('\n');
     }
 
-    const lines: string[] = ['💼 Балансы клиентов', ''];
-
-    for (const c of clients) {
-      const bal = await this.wbSyncService.getBalance(c.id);
-      const amount = bal ? parseFloat(String(bal.current)) : 0;
-      const cur = bal?.currency ?? c.currency ?? 'RUB';
-      const formatted = `${this.fmt(amount)} ${cur}`;
-
-      const threshold =
-        c.balance_alert_threshold != null
-          ? parseFloat(String(c.balance_alert_threshold))
-          : null;
-
-      let suffix = '✅';
-      if (threshold != null) {
-        if (amount < threshold) suffix = '🔴 (ниже порога)';
-        else if (amount < threshold * 1.2) suffix = '⚠️ (около порога)';
-      }
-
-      lines.push(`👤 ${c.name} — ${formatted} ${suffix}`);
+    const matched = new Map<string, Client>();
+    const notFound: string[] = [];
+    for (const raw of tokens) {
+      const t = raw.trim();
+      if (!t) continue;
+      const q = t.toLowerCase();
+      const hits = all.filter(
+        (c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase() === q,
+      );
+      if (hits.length === 0) notFound.push(t);
+      else hits.forEach((c) => matched.set(c.id, c));
     }
 
+    const lines: string[] = [];
+    if (notFound.length) {
+      lines.push(`⚠️ Не найдены: ${notFound.join(', ')}`);
+    }
+
+    if (matched.size === 0) {
+      return lines.join('\n').trimEnd() || 'Нет подходящих клиентов.';
+    }
+
+    const ids = [...matched.keys()];
+    const total = await this.expensesService.sumExtraExpensesKgs({
+      clientIds: ids,
+    });
+
+    const names = [...matched.values()].map((c) => c.name).join(', ');
+    lines.unshift(`🏷️ ${names}`);
+    lines.push(`💵 Итого доп. расходов (KGS): ${this.fmt(total)}`);
     return lines.join('\n');
   }
 }
