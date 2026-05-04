@@ -8,6 +8,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { TelegramAuthThrottlerGuard } from './telegram-auth.throttler.guard.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { TelegramAuthDto } from './dto/telegram-auth.dto.js';
@@ -32,8 +33,8 @@ export class AuthController {
 
   @Post('telegram')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UseGuards(TelegramAuthThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   async telegram(@Body() dto: TelegramAuthDto) {
     return this.authService.loginWithTelegram(dto.initData);
   }

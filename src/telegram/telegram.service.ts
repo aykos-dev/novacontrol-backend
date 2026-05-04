@@ -176,7 +176,7 @@ export class TelegramService {
       const icon = STATUS_ICONS[client.status] ?? '';
       lines.push('');
       lines.push(
-        `👤 ${client.clientName} — Баланс: ${this.formatNumber(client.balance)} ${client.currency} ${icon}`,
+        `👤 ${client.clientName} — Расходы: ${this.formatNumber(client.balance)} ${client.currency} ${icon}`,
       );
     }
 

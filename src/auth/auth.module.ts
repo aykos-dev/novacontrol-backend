@@ -7,6 +7,7 @@ import { AdminUser } from '../users/admin-user.entity.js';
 import { AuthService } from './auth.service.js';
 import { AuthController } from './auth.controller.js';
 import { JwtStrategy } from './jwt.strategy.js';
+import { TelegramAuthThrottlerGuard } from './telegram-auth.throttler.guard.js';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { JwtStrategy } from './jwt.strategy.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, TelegramAuthThrottlerGuard],
   exports: [AuthService],
 })
 export class AuthModule {}
