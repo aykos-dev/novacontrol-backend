@@ -34,6 +34,8 @@ import { AppController } from './app.controller.js';
         database: config.get('DATABASE_NAME', 'wb_analytics'),
         autoLoadEntities: true,
         synchronize: config.get('DATABASE_SYNC', 'true') === 'true',
+        migrations: ['dist/migrations/*.js'],
+        migrationsRun: true,
       }),
     }),
     WbApiModule,
