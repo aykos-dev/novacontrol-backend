@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { AlertLog, AlertType } from './alert-log.entity.js';
 import { Client } from '../clients/client.entity.js';
-import { WbBalance } from '../wb-sync/wb-balance.entity.js';
 import { ExtraExpense } from '../expenses/extra-expense.entity.js';
+import { ExtraIncome } from '../expenses/extra-income.entity.js';
 import { TelegramService } from '../telegram/telegram.service.js';
 
 @Injectable()
@@ -16,45 +16,48 @@ export class AlertsService {
     private readonly alertLogRepo: Repository<AlertLog>,
     @InjectRepository(Client)
     private readonly clientRepo: Repository<Client>,
-    @InjectRepository(WbBalance)
-    private readonly wbBalanceRepo: Repository<WbBalance>,
     @InjectRepository(ExtraExpense)
     private readonly expenseRepo: Repository<ExtraExpense>,
+    @InjectRepository(ExtraIncome)
+    private readonly incomeRepo: Repository<ExtraIncome>,
     private readonly telegramService: TelegramService,
   ) {}
 
-  /** WB wallet balance minus all extra expenses recorded for this client. */
+  /** Extra income minus extra expenses recorded for this client, in entered USD amounts. */
   private async getEffectiveBalance(clientId: string): Promise<number> {
-    const latestBalance = await this.wbBalanceRepo.findOne({
-      where: { client_id: clientId },
-      order: { snapshot_at: 'DESC' },
-    });
-
-    const wbBalance = latestBalance ? parseFloat(latestBalance.current) : 0;
-
     const { totalExpenses } = await this.expenseRepo
       .createQueryBuilder('e')
       .select(
-        'COALESCE(SUM(COALESCE(e.amount_kgs, CAST(e.amount AS DECIMAL))), 0)',
+        'COALESCE(SUM(CAST(e.amount AS DECIMAL)), 0)',
         'totalExpenses',
       )
       .where('e.client_id = :clientId', { clientId })
       .andWhere('e.deleted_at IS NULL')
       .getRawOne();
 
-    return wbBalance - parseFloat(totalExpenses);
+    const { totalIncomes } = await this.incomeRepo
+      .createQueryBuilder('i')
+      .select(
+        'COALESCE(SUM(CAST(i.amount AS DECIMAL)), 0)',
+        'totalIncomes',
+      )
+      .where('i.client_id = :clientId', { clientId })
+      .andWhere('i.deleted_at IS NULL')
+      .getRawOne();
+
+    return Math.round((parseFloat(totalIncomes) - parseFloat(totalExpenses)) * 100) / 100;
   }
 
   /**
-   * If the effective balance (WB balance − extra expenses) for this client
-   * is below their threshold, send Telegram once per day.
+   * If the effective balance (extra income − extra expenses) is non-positive,
+   * send Telegram once per day.
    */
   async checkLowBalanceForClient(clientId: string): Promise<void> {
     const client = await this.clientRepo.findOne({
       where: { id: clientId, is_active: true },
     });
 
-    if (!client || client.balance_alert_threshold == null) {
+    if (!client) {
       return;
     }
 
@@ -62,9 +65,8 @@ export class AlertsService {
     todayStart.setHours(0, 0, 0, 0);
 
     const balance = await this.getEffectiveBalance(clientId);
-    const threshold = parseFloat(client.balance_alert_threshold);
 
-    if (balance >= threshold) {
+    if (balance > 0) {
       return;
     }
 
@@ -83,15 +85,15 @@ export class AlertsService {
     await this.telegramService.sendLowBalanceAlert({
       clientName: client.name,
       currentBalance: balance,
-      threshold,
-      currency: client.currency,
+      threshold: 0,
+      currency: 'USD',
     });
 
     await this.alertLogRepo.save(
       this.alertLogRepo.create({
         client_id: client.id,
         alert_type: AlertType.LOW_BALANCE,
-        message: `Low balance alert: ${balance} ${client.currency} (threshold: ${threshold} ${client.currency})`,
+        message: `Low balance alert: ${balance} USD`,
       }),
     );
 
@@ -105,9 +107,7 @@ export class AlertsService {
     });
 
     for (const client of clients) {
-      if (client.balance_alert_threshold != null) {
-        await this.checkLowBalanceForClient(client.id);
-      }
+      await this.checkLowBalanceForClient(client.id);
     }
   }
 
@@ -125,17 +125,11 @@ export class AlertsService {
 
     for (const client of clients) {
       const balance = await this.getEffectiveBalance(client.id);
-      const currency = client.currency;
+      const currency = 'USD';
       let status: 'ok' | 'warning' | 'critical' = 'ok';
 
-      if (client.balance_alert_threshold != null) {
-        const threshold = parseFloat(client.balance_alert_threshold);
-
-        if (balance < threshold) {
-          status = 'critical';
-        } else if (balance < threshold * 1.2) {
-          status = 'warning';
-        }
+      if (balance <= 0) {
+        status = 'critical';
       }
 
       reportData.push({

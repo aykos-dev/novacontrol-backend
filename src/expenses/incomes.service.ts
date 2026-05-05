@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExtraIncome } from './extra-income.entity.js';
 import { CreateIncomeDto } from './dto/create-income.dto.js';
 import { UpdateIncomeDto } from './dto/update-income.dto.js';
 import { roundKgsAmountUsdTimesRate } from './fx.utils.js';
+import { AlertsService } from '../alerts/alerts.service.js';
 
 /** Same semantics as expenses: KGS equivalent for WB rows. */
 const INCOME_KGS_SUM_SQL =
@@ -12,9 +13,12 @@ const INCOME_KGS_SUM_SQL =
 
 @Injectable()
 export class IncomesService {
+  private readonly logger = new Logger(IncomesService.name);
+
   constructor(
     @InjectRepository(ExtraIncome)
     private readonly incomeRepo: Repository<ExtraIncome>,
+    private readonly alertsService: AlertsService,
   ) {}
 
   async findAll(filters: {
@@ -86,6 +90,15 @@ export class IncomesService {
       where: { id: saved.id },
       relations: ['client', 'creator'],
     });
+
+    try {
+      await this.alertsService.checkLowBalanceForClient(dto.client_id);
+    } catch (err) {
+      this.logger.warn(
+        `Low-balance check after income failed for client ${dto.client_id}`,
+        err instanceof Error ? err.stack : err,
+      );
+    }
 
     return full ?? saved;
   }
@@ -196,5 +209,56 @@ export class IncomesService {
       date: String(r.date),
       total: Math.round(Number(r.total) * 100) / 100,
     }));
+  }
+
+  async findEntriesByClientForDate(
+    clientId: string,
+    date: string,
+  ): Promise<
+    Array<{
+      amount: number;
+      currency: string;
+      amountKgs: number;
+    }>
+  > {
+    const rows = await this.incomeRepo.find({
+      where: { client_id: clientId, income_date: date },
+      order: { created_at: 'ASC' },
+    });
+
+    return rows.map((row) => ({
+      amount: Number(row.amount),
+      currency: row.currency,
+      amountKgs: Number(row.amount_kgs ?? row.amount),
+    }));
+  }
+
+  async sumExtraIncomesOriginalAmount(filters: {
+    incomeDate?: string;
+    clientId?: string;
+    clientIds?: string[];
+  }): Promise<number> {
+    const qb = this.incomeRepo
+      .createQueryBuilder('income')
+      .select('COALESCE(SUM(CAST(income.amount AS DECIMAL)), 0)', 'total');
+
+    if (filters.incomeDate) {
+      qb.andWhere('income.income_date = :incomeDate', {
+        incomeDate: filters.incomeDate,
+      });
+    }
+    if (filters.clientId) {
+      qb.andWhere('income.client_id = :clientId', {
+        clientId: filters.clientId,
+      });
+    }
+    if (filters.clientIds?.length) {
+      qb.andWhere('income.client_id IN (:...clientIds)', {
+        clientIds: filters.clientIds,
+      });
+    }
+
+    const row = await qb.getRawOne<{ total: string | null }>();
+    return Math.round(Number(row?.total ?? 0) * 100) / 100;
   }
 }

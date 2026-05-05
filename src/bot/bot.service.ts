@@ -46,6 +46,25 @@ export class BotService {
     });
   }
 
+  private currentDate(): string {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: 'Asia/Tashkent',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    return `${year}-${month}-${day}`;
+  }
+
+  private resolveDate(dateArg?: string): string {
+    return dateArg && /^\d{4}-\d{2}-\d{2}$/.test(dateArg)
+      ? dateArg
+      : this.currentDate();
+  }
+
   private negFmt(n: number): string {
     if (n === 0) return '0,00';
     return `−${this.fmt(Math.abs(n))}`;
@@ -155,6 +174,129 @@ export class BotService {
     }
 
     return blocks.join('\n').trimEnd();
+  }
+
+  async buildDailyExtraExpenseReportText(dateArg?: string): Promise<string> {
+    const date = this.resolveDate(dateArg);
+    const clientReports =
+      await this.expensesService.getExpenseCategoryReportByClient(date);
+
+    if (clientReports.length === 0) {
+      return [`📅  Отчёт за ${date}`, '', 'Доп. расходов за день нет.'].join(
+        '\n',
+      );
+    }
+
+    const blocks: string[] = [`📅  Отчёт за ${date}`];
+
+    for (const client of clientReports) {
+      blocks.push('');
+      blocks.push(`📁 ${client.clientName}`);
+
+      for (const expense of client.expenses) {
+        const icon = expense.iconEmoji ?? '📌';
+        blocks.push(
+          `${icon} ${expense.categoryName}: ${this.fmt(expense.amount)} ${expense.currency}`,
+        );
+      }
+
+      blocks.push(`💵 Итого: ${this.fmt(client.total)} ${client.currency}`);
+    }
+
+    return blocks.join('\n');
+  }
+
+  async buildBalanceText(dateArg?: string): Promise<string> {
+    const date = this.resolveDate(dateArg);
+    const clients = await this.resolveClients();
+
+    if (clients.length === 0) {
+      return 'Нет активных клиентов.';
+    }
+
+    const blocks: string[] = [`📅  Отчёт за ${date}`];
+
+    for (const client of clients) {
+      const todayIncomes = await this.incomesService.findEntriesByClientForDate(
+        client.id,
+        date,
+      );
+      if (todayIncomes.length === 0) {
+        continue;
+      }
+
+      const totalIncomeToday = todayIncomes.reduce(
+        (sum, income) => sum + income.amount,
+        0,
+      );
+      const totalIncomeAll =
+        await this.incomesService.sumExtraIncomesOriginalAmount({
+          clientId: client.id,
+        });
+      const totalExpenseAll =
+        await this.expensesService.sumExtraExpensesOriginalAmount({
+          clientId: client.id,
+        });
+      const balance = Math.round((totalIncomeAll - totalExpenseAll) * 100) / 100;
+      const report = await this.wbSyncService.getReport(client.id, date, date);
+      const revenue = report.totals.income - report.totals.expenses;
+
+      blocks.push('');
+      blocks.push(`📁 ${client.name}`);
+
+      for (const income of todayIncomes) {
+        blocks.push(
+          `✅ Пополнениe: ${this.fmt(income.amount)} ${income.currency}`,
+        );
+      }
+
+      blocks.push(`💵 Итого: ${this.fmt(totalIncomeToday)} USD`);
+      blocks.push(`💰Баланс: ${this.fmt(balance)} USD`);
+      blocks.push(`💸Выручка: ${this.fmt(revenue)} KGS`);
+    }
+
+    if (blocks.length === 1) {
+      blocks.push('');
+      blocks.push('Пополнений за день нет.');
+    }
+
+    return blocks.join('\n');
+  }
+
+  async buildViruchkaText(dateArg?: string): Promise<string> {
+    const date = this.resolveDate(dateArg);
+    const clients = await this.resolveClients();
+
+    if (clients.length === 0) {
+      return 'Нет активных клиентов.';
+    }
+
+    const blocks: string[] = [`📅 Отчёт за ${date}`];
+
+    for (const client of clients) {
+      const incomeSummary = await this.incomesService.getSummary(
+        client.id,
+        date,
+        date,
+      );
+      const expenseSummary = await this.expensesService.getSummary(
+        client.id,
+        date,
+        date,
+      );
+      const report = await this.wbSyncService.getReport(client.id, date, date);
+      const revenue = report.totals.income - report.totals.expenses;
+      const netRevenue = revenue - expenseSummary.grandTotal;
+
+      blocks.push('');
+      blocks.push('🚪 Кабинет');
+      blocks.push(`📁 ${client.name}`);
+      blocks.push(`📥 Пополнение: ${this.fmt(incomeSummary.grandTotal)} KGS`);
+      blocks.push(`🛒 Доп. расходы: ${this.fmt(expenseSummary.grandTotal)} KGS`);
+      blocks.push(`💸 Чис. Выручка: ${this.fmt(netRevenue)} KGS`);
+    }
+
+    return blocks.join('\n');
   }
 
   /** Net extra expenses (KGS) for one day; date defaults to UTC today (YYYY-MM-DD). */

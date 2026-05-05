@@ -25,11 +25,11 @@ export class SchedulerController {
   }
 
   @Post('jobs/:jobId/run')
-  async runJob(@Param('jobId') jobId: string) {
+  runJob(@Param('jobId') jobId: string) {
     if (!isSchedulerJobId(jobId)) {
       throw new BadRequestException(`Unknown job: ${jobId}`);
     }
-    await this.schedulerService.runManualJob(jobId);
-    return { ok: true as const, jobId };
+    const { started } = this.schedulerService.runManualJobInBackground(jobId);
+    return { ok: true as const, jobId, started };
   }
 }

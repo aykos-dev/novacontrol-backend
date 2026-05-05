@@ -14,6 +14,7 @@ import type { SchedulerJobId } from './scheduler-jobs.js';
 @Injectable()
 export class SchedulerService implements OnModuleInit {
   private readonly logger = new Logger(SchedulerService.name);
+  private readonly runningManualJobs = new Set<SchedulerJobId>();
 
   constructor(
     private readonly wbSyncService: WbSyncService,
@@ -78,6 +79,32 @@ export class SchedulerService implements OnModuleInit {
       case 'alert-reset':
         return this.handleAlertReset();
     }
+  }
+
+  runManualJobInBackground(jobId: SchedulerJobId): { started: boolean } {
+    if (this.runningManualJobs.has(jobId)) {
+      this.logger.warn(`[manual:${jobId}] skipped — job is already running`);
+      return { started: false };
+    }
+
+    this.runningManualJobs.add(jobId);
+    this.logger.log(`[manual:${jobId}] queued`);
+
+    void this.runManualJob(jobId)
+      .then(() => {
+        this.logger.log(`[manual:${jobId}] finished`);
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          `[manual:${jobId}] failed`,
+          err instanceof Error ? err.stack : String(err),
+        );
+      })
+      .finally(() => {
+        this.runningManualJobs.delete(jobId);
+      });
+
+    return { started: true };
   }
 
   async handleFullSync(): Promise<void> {

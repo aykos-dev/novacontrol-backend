@@ -31,6 +31,19 @@ export class TelegramService {
     return `${intPart}.${decPart}`;
   }
 
+  private currentDate(): string {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: 'Asia/Tashkent',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    return `${year}-${month}-${day}`;
+  }
+
   private telegramErrorDetail(error: unknown): string {
     if (isAxiosError(error)) {
       const data = error.response?.data;
@@ -176,7 +189,7 @@ export class TelegramService {
       const icon = STATUS_ICONS[client.status] ?? '';
       lines.push('');
       lines.push(
-        `👤 ${client.clientName} — Расходы: ${this.formatNumber(client.balance)} ${client.currency} ${icon}`,
+        `👤 ${client.clientName} — Баланс: ${this.formatNumber(client.balance)} ${client.currency} ${icon}`,
       );
     }
 
@@ -189,17 +202,13 @@ export class TelegramService {
     threshold: number;
     currency: string;
   }): Promise<void> {
-    const deficit = data.threshold - data.currentBalance;
-
     const lines = [
-      '🚨 Внимание! Низкий баланс',
+      '⚠️warning',
       '',
-      `👤 Клиент: ${data.clientName}`,
-      `💰 Текущие расходы: ${this.formatNumber(data.currentBalance)} ${data.currency}`,
-      `⚠️ Порог: ${this.formatNumber(data.threshold)} ${data.currency}`,
-      `📉 Баланс ниже порога на: ${this.formatNumber(deficit)} ${data.currency}`,
+      `📅 Отчёт за ${this.currentDate()}`,
       '',
-      'Пожалуйста, пополните баланс.',
+      `👤 ${data.clientName}`,
+      `💳 Баланс: ${this.formatNumber(data.currentBalance)} ${data.currency}`,
     ];
 
     await this.sendMessage(lines.join('\n'));

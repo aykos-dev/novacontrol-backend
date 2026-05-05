@@ -14,13 +14,34 @@ export class BotInternalController {
     @Query('dateFrom') dateFrom: string,
     @Query('dateTo') dateTo: string,
     @Query('client') client?: string,
+    @Query('date') date?: string,
+    @Query('legacy') legacy?: string,
   ): Promise<{ text: string }> {
+    if (legacy !== 'true') {
+      const text = await this.botService.buildDailyExtraExpenseReportText(
+        date?.trim(),
+      );
+      return { text };
+    }
+
     const from = dateFrom?.trim();
     const to = dateTo?.trim();
     if (!from || !to) {
       return { text: 'Укажите dateFrom и dateTo (YYYY-MM-DD).' };
     }
     const text = await this.botService.buildReportText(from, to, client);
+    return { text };
+  }
+
+  @Get('balance')
+  async balance(@Query('date') date?: string): Promise<{ text: string }> {
+    const text = await this.botService.buildBalanceText(date?.trim());
+    return { text };
+  }
+
+  @Get('viruchka')
+  async viruchka(@Query('date') date?: string): Promise<{ text: string }> {
+    const text = await this.botService.buildViruchkaText(date?.trim());
     return { text };
   }
 

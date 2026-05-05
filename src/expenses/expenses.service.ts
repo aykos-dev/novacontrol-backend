@@ -330,4 +330,117 @@ export class ExpensesService {
       total: Math.round(Number(r.total) * 100) / 100,
     }));
   }
+
+  async getExpenseCategoryReportByClient(date: string): Promise<
+    Array<{
+      clientId: string;
+      clientName: string;
+      expenses: Array<{
+        categoryName: string;
+        iconEmoji: string | null;
+        amount: number;
+        currency: string;
+      }>;
+      total: number;
+      currency: string;
+    }>
+  > {
+    const rows = await this.expenseRepo
+      .createQueryBuilder('expense')
+      .innerJoin('expense.client', 'client')
+      .innerJoin('expense.expenseCategory', 'cat')
+      .select('client.id', 'clientId')
+      .addSelect('client.name', 'clientName')
+      .addSelect('cat.name', 'categoryName')
+      .addSelect('cat.icon_emoji', 'iconEmoji')
+      .addSelect('cat.sort_order', 'sortOrder')
+      .addSelect('expense.currency', 'currency')
+      .addSelect('SUM(CAST(expense.amount AS DECIMAL))', 'amount')
+      .where('client.is_active = true')
+      .andWhere('expense.expense_date = :date', { date })
+      .groupBy('client.id')
+      .addGroupBy('client.name')
+      .addGroupBy('cat.id')
+      .addGroupBy('cat.name')
+      .addGroupBy('cat.icon_emoji')
+      .addGroupBy('cat.sort_order')
+      .addGroupBy('expense.currency')
+      .orderBy('client.name', 'ASC')
+      .addOrderBy('cat.sort_order', 'ASC')
+      .getRawMany<{
+        clientId: string;
+        clientName: string;
+        categoryName: string;
+        iconEmoji: string | null;
+        sortOrder: string;
+        currency: string;
+        amount: string;
+      }>();
+
+    const byClient = new Map<
+      string,
+      {
+        clientId: string;
+        clientName: string;
+        expenses: Array<{
+          categoryName: string;
+          iconEmoji: string | null;
+          amount: number;
+          currency: string;
+        }>;
+        total: number;
+        currency: string;
+      }
+    >();
+
+    for (const row of rows) {
+      const amount = Math.round(Number(row.amount) * 100) / 100;
+      const item = byClient.get(row.clientId) ?? {
+        clientId: row.clientId,
+        clientName: row.clientName,
+        expenses: [],
+        total: 0,
+        currency: row.currency,
+      };
+      item.expenses.push({
+        categoryName: row.categoryName,
+        iconEmoji: row.iconEmoji,
+        amount,
+        currency: row.currency,
+      });
+      item.total = Math.round((item.total + amount) * 100) / 100;
+      byClient.set(row.clientId, item);
+    }
+
+    return [...byClient.values()];
+  }
+
+  async sumExtraExpensesOriginalAmount(filters: {
+    expenseDate?: string;
+    clientId?: string;
+    clientIds?: string[];
+  }): Promise<number> {
+    const qb = this.expenseRepo
+      .createQueryBuilder('expense')
+      .select('COALESCE(SUM(CAST(expense.amount AS DECIMAL)), 0)', 'total');
+
+    if (filters.expenseDate) {
+      qb.andWhere('expense.expense_date = :expenseDate', {
+        expenseDate: filters.expenseDate,
+      });
+    }
+    if (filters.clientId) {
+      qb.andWhere('expense.client_id = :clientId', {
+        clientId: filters.clientId,
+      });
+    }
+    if (filters.clientIds?.length) {
+      qb.andWhere('expense.client_id IN (:...clientIds)', {
+        clientIds: filters.clientIds,
+      });
+    }
+
+    const row = await qb.getRawOne<{ total: string | null }>();
+    return Math.round(Number(row?.total ?? 0) * 100) / 100;
+  }
 }
