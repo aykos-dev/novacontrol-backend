@@ -190,7 +190,14 @@ export class ExpensesService {
     /** Sum of expense equivalents in KGS (WB mixing currency). */
     grandTotal: number;
     grandTotalKgs: number;
+    /** Sum of original expense amounts, used for USD dashboard cards. */
+    grandTotalOriginal: number;
   }> {
+    const filters: { clientId?: string; dateFrom?: string; dateTo?: string } = {
+      clientId,
+      dateFrom,
+      dateTo,
+    };
     const qb = this.expenseRepo
       .createQueryBuilder('expense')
       .innerJoin('expense.expenseCategory', 'cat')
@@ -238,8 +245,9 @@ export class ExpensesService {
     }));
 
     const grandTotal = byCategory.reduce((sum, r) => sum + r.total, 0);
+    const grandTotalOriginal = await this.sumExtraExpensesOriginalAmount(filters);
 
-    return { byCategory, grandTotal, grandTotalKgs: grandTotal };
+    return { byCategory, grandTotal, grandTotalKgs: grandTotal, grandTotalOriginal };
   }
 
   /**
@@ -403,6 +411,8 @@ export class ExpensesService {
 
   async sumExtraExpensesOriginalAmount(filters: {
     expenseDate?: string;
+    dateFrom?: string;
+    dateTo?: string;
     clientId?: string;
     clientIds?: string[];
   }): Promise<number> {
@@ -413,6 +423,16 @@ export class ExpensesService {
     if (filters.expenseDate) {
       qb.andWhere('expense.expense_date = :expenseDate', {
         expenseDate: filters.expenseDate,
+      });
+    }
+    if (filters.dateFrom) {
+      qb.andWhere('expense.expense_date >= :dateFrom', {
+        dateFrom: filters.dateFrom,
+      });
+    }
+    if (filters.dateTo) {
+      qb.andWhere('expense.expense_date <= :dateTo', {
+        dateTo: filters.dateTo,
       });
     }
     if (filters.clientId) {

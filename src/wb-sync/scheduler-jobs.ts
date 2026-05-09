@@ -9,7 +9,7 @@ export const SCHEDULER_JOBS = [
     id: 'daily-expense-report',
     label: 'Daily expense report (Telegram)',
     description: 'Sends today’s expense breakdown per client to Telegram.',
-    scheduleLabel: 'Daily at 22:00',
+    scheduleLabel: 'Daily at 23:00',
   },
   {
     id: 'morning-balance-report',

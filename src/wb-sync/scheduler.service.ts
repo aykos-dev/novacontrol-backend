@@ -35,36 +35,48 @@ export class SchedulerService implements OnModuleInit {
     );
     const dailyReportCron = this.configService.get<string>(
       'DAILY_REPORT_TIME',
-      '0 22 * * *',
+      '0 23 * * *',
     );
     const morningReportCron = this.configService.get<string>(
       'MORNING_REPORT_TIME',
       '0 9 * * *',
     );
+    const timezone = this.configService.get<string>(
+      'CRON_TIMEZONE',
+      'Asia/Tashkent',
+    );
 
-    this.addCron('full-sync', syncCron, () => this.handleFullSync());
+    this.addCron('full-sync', syncCron, () => this.handleFullSync(), timezone);
     this.addCron('daily-expense-report', dailyReportCron, () =>
       this.handleDailyExpenseReport(),
+      timezone,
     );
     this.addCron('morning-balance-report', morningReportCron, () =>
       this.handleMorningBalanceReport(),
+      timezone,
     );
     this.addCron('alert-reset', '0 0 * * *', () =>
       this.handleAlertReset(),
+      timezone,
     );
   }
 
-  private addCron(name: string, expression: string, cb: () => Promise<void>): void {
+  private addCron(
+    name: string,
+    expression: string,
+    cb: () => Promise<void>,
+    timezone: string,
+  ): void {
     const job = new CronJob(expression, async () => {
       try {
         await cb();
       } catch (err: any) {
         this.logger.error(`[CRON:${name}] ${err?.message}`);
       }
-    });
+    }, null, false, timezone);
     this.schedulerRegistry.addCronJob(name, job);
     job.start();
-    this.logger.log(`Registered cron "${name}" with schedule: ${expression}`);
+    this.logger.log(`Registered cron "${name}" with schedule: ${expression} (${timezone})`);
   }
 
   /** Manual trigger from API (same logic as cron handlers). */

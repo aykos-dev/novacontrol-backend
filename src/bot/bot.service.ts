@@ -256,8 +256,6 @@ export class BotService {
           clientId: client.id,
         });
       const balance = Math.round((totalIncomeAll - totalExpenseAll) * 100) / 100;
-      const report = await this.wbSyncService.getReport(client.id, date, date);
-      const revenue = report.totals.income - report.totals.expenses;
 
       blocks.push('');
       blocks.push(`📁 ${client.name}`);
@@ -270,7 +268,6 @@ export class BotService {
 
       blocks.push(`💵 Итого: ${this.fmt(totalIncomeToday)} USD`);
       blocks.push(`💰Баланс: ${this.fmt(balance)} USD`);
-      blocks.push(`💸Выручка: ${this.fmt(revenue)} KGS`);
     }
 
     if (blocks.length === 1) {
@@ -292,25 +289,23 @@ export class BotService {
     const blocks: string[] = [`📅 Отчёт за ${isoToDisplay(date)}`];
 
     for (const client of clients) {
-      const incomeSummary = await this.incomesService.getSummary(
-        client.id,
-        date,
-        date,
-      );
-      const expenseSummary = await this.expensesService.getSummary(
-        client.id,
-        date,
-        date,
-      );
+      const extraIncome = await this.incomesService.sumExtraIncomesOriginalAmount({
+        clientId: client.id,
+        incomeDate: date,
+      });
+      const extraExpense = await this.expensesService.sumExtraExpensesOriginalAmount({
+        clientId: client.id,
+        expenseDate: date,
+      });
       const report = await this.wbSyncService.getReport(client.id, date, date);
       const revenue = report.totals.income - report.totals.expenses;
-      const netRevenue = revenue - expenseSummary.grandTotal;
+      const netRevenue = revenue - extraExpense;
 
       blocks.push('');
       blocks.push('🚪 Кабинет');
       blocks.push(`📁 ${client.name}`);
-      blocks.push(`📥 Пополнение: ${this.fmt(incomeSummary.grandTotal)} KGS`);
-      blocks.push(`🛒 Доп. расходы: ${this.fmt(expenseSummary.grandTotal)} KGS`);
+      blocks.push(`📥 Пополнение: ${this.fmt(extraIncome)} USD`);
+      blocks.push(`🛒 Доп. расходы: ${this.fmt(extraExpense)} USD`);
       blocks.push(`💸 Чис. Выручка: ${this.fmt(netRevenue)} KGS`);
     }
 

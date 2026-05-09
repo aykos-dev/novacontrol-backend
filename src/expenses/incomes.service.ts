@@ -161,7 +161,7 @@ export class IncomesService {
     clientId?: string,
     dateFrom?: string,
     dateTo?: string,
-  ): Promise<{ grandTotal: number; grandTotalKgs: number }> {
+  ): Promise<{ grandTotal: number; grandTotalKgs: number; grandTotalOriginal: number }> {
     const qb = this.incomeRepo
       .createQueryBuilder('income')
       .select(`SUM(${INCOME_KGS_SUM_SQL})`, 'total');
@@ -180,8 +180,13 @@ export class IncomesService {
 
     const row: { total: string | null } | undefined = await qb.getRawOne();
     const grandTotal = Math.round(Number(row?.total ?? 0) * 100) / 100;
+    const grandTotalOriginal = await this.sumExtraIncomesOriginalAmount({
+      clientId,
+      dateFrom,
+      dateTo,
+    });
 
-    return { grandTotal, grandTotalKgs: grandTotal };
+    return { grandTotal, grandTotalKgs: grandTotal, grandTotalOriginal };
   }
 
   async getDailyTotals(
@@ -235,6 +240,8 @@ export class IncomesService {
 
   async sumExtraIncomesOriginalAmount(filters: {
     incomeDate?: string;
+    dateFrom?: string;
+    dateTo?: string;
     clientId?: string;
     clientIds?: string[];
   }): Promise<number> {
@@ -245,6 +252,16 @@ export class IncomesService {
     if (filters.incomeDate) {
       qb.andWhere('income.income_date = :incomeDate', {
         incomeDate: filters.incomeDate,
+      });
+    }
+    if (filters.dateFrom) {
+      qb.andWhere('income.income_date >= :dateFrom', {
+        dateFrom: filters.dateFrom,
+      });
+    }
+    if (filters.dateTo) {
+      qb.andWhere('income.income_date <= :dateTo', {
+        dateTo: filters.dateTo,
       });
     }
     if (filters.clientId) {
