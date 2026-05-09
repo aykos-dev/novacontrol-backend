@@ -2,7 +2,6 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExtraExpense } from './extra-expense.entity.js';
-import { TelegramService } from '../telegram/telegram.service.js';
 import { CreateExpenseDto } from './dto/create-expense.dto.js';
 import { UpdateExpenseDto } from './dto/update-expense.dto.js';
 import { ExpenseCategoriesService } from './expense-categories.service.js';
@@ -20,7 +19,6 @@ export class ExpensesService {
   constructor(
     @InjectRepository(ExtraExpense)
     private readonly expenseRepo: Repository<ExtraExpense>,
-    private readonly telegramService: TelegramService,
     private readonly expenseCategoriesService: ExpenseCategoriesService,
     private readonly alertsService: AlertsService,
   ) {}
@@ -105,18 +103,6 @@ export class ExpensesService {
       where: { id: saved.id },
       relations: ['client', 'creator', 'expenseCategory'],
     });
-
-    if (full?.expenseCategory) {
-      const icon = full.expenseCategory.icon_emoji ?? '📌';
-      await this.telegramService.sendExpenseCreatedAlert({
-        date: full.expense_date,
-        username: full.creator?.username ?? 'unknown',
-        categoryLabel: `${icon} ${full.expenseCategory.name}`.trim(),
-        amount: Number(full.amount),
-        currency: full.currency,
-        note: full.note,
-      });
-    }
 
     try {
       await this.alertsService.checkLowBalanceForClient(dto.client_id);

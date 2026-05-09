@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AdminUser, AdminRole } from './admin-user.entity.js';
+import { ALL_APP_SECTIONS } from './app-section.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 
@@ -45,6 +46,8 @@ export class UsersService implements OnModuleInit {
       username: dto.username,
       password_hash: hashedPassword,
       role: dto.role ?? AdminRole.VIEWER,
+      allowed_sections:
+        dto.role === AdminRole.ADMIN ? ALL_APP_SECTIONS : (dto.allowed_sections ?? []),
       telegram_id: dto.telegram_id ? String(dto.telegram_id) : null,
     });
     const saved = await this.usersRepository.save(user);
@@ -64,6 +67,12 @@ export class UsersService implements OnModuleInit {
     if (dto.name !== undefined) user.name = dto.name;
     if (dto.username !== undefined) user.username = dto.username;
     if (dto.role !== undefined) user.role = dto.role;
+    if (dto.allowed_sections !== undefined) {
+      user.allowed_sections = dto.allowed_sections;
+    }
+    if (user.role === AdminRole.ADMIN) {
+      user.allowed_sections = ALL_APP_SECTIONS;
+    }
     if (dto.telegram_id !== undefined)
       user.telegram_id = dto.telegram_id ? String(dto.telegram_id) : null;
 
@@ -102,6 +111,7 @@ export class UsersService implements OnModuleInit {
       username: 'admin',
       password_hash: hashedPassword,
       role: AdminRole.ADMIN,
+      allowed_sections: ALL_APP_SECTIONS,
     });
     await this.usersRepository.save(admin);
     this.logger.log('Default admin user created (username: admin)');

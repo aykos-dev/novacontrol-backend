@@ -16,9 +16,9 @@ import { CreateExpenseDto } from './dto/create-expense.dto.js';
 import { UpdateExpenseDto } from './dto/update-expense.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
+import { Sections } from '../common/decorators/roles.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
-import { AdminRole } from '../users/admin-user.entity.js';
+import { AppSection } from '../users/app-section.js';
 
 @Controller('expenses')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,7 +63,7 @@ export class ExpensesController {
   }
 
   @Post()
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.FINANCE)
   create(
     @Body() dto: CreateExpenseDto,
     @CurrentUser() user: { id: string },
@@ -72,13 +72,13 @@ export class ExpensesController {
   }
 
   @Patch(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.FINANCE)
   update(@Param('id') id: string, @Body() dto: UpdateExpenseDto) {
     return this.expensesService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.FINANCE)
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.expensesService.remove(id);

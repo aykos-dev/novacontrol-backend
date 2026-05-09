@@ -8,6 +8,12 @@ const STATUS_ICONS: Record<string, string> = {
   critical: '🔴',
 };
 
+function isoToDisplayDate(date: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const [year, month, day] = date.split('-');
+  return `${day}-${month}-${year}`;
+}
+
 @Injectable()
 export class TelegramService {
   private readonly logger = new Logger(TelegramService.name);
@@ -41,7 +47,7 @@ export class TelegramService {
     const year = parts.find((p) => p.type === 'year')?.value;
     const month = parts.find((p) => p.type === 'month')?.value;
     const day = parts.find((p) => p.type === 'day')?.value;
-    return `${year}-${month}-${day}`;
+    return `${day}-${month}-${year}`;
   }
 
   private telegramErrorDetail(error: unknown): string {
@@ -118,7 +124,7 @@ export class TelegramService {
     const lines = [
       '✅ Записано',
       '',
-      `📅 Дата: ${data.date}`,
+      `📅 Дата: ${isoToDisplayDate(data.date)}`,
       `👤 Пользователь: ${data.username}`,
       `📢 Категория: ${data.categoryLabel}`,
       `💰 Сумма: ${this.formatNumber(data.amount)} ${data.currency}`,
@@ -146,7 +152,7 @@ export class TelegramService {
     grandTotal: number;
     currency: string;
   }): Promise<void> {
-    const lines: string[] = [`📊 Отчёт за ${data.date}`];
+    const lines: string[] = [`📊 Отчёт за ${isoToDisplayDate(data.date)}`];
 
     for (const client of data.clientReports) {
       lines.push('');
@@ -203,8 +209,6 @@ export class TelegramService {
     currency: string;
   }): Promise<void> {
     const lines = [
-      '⚠️warning',
-      '',
       `📅 Отчёт за ${this.currentDate()}`,
       '',
       `👤 ${data.clientName}`,

@@ -2,8 +2,8 @@ export const SCHEDULER_JOBS = [
   {
     id: 'full-sync',
     label: 'Full WB sync',
-    description: 'Pulls report data from Wildberries for all active clients.',
-    scheduleLabel: 'Every 12 hours',
+    description: 'Pulls report data from Wildberries for all active clients every 30 minutes.',
+    scheduleLabel: 'Every 30 minutes',
   },
   {
     id: 'daily-expense-report',

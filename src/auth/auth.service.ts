@@ -4,7 +4,8 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { AdminUser } from '../users/admin-user.entity.js';
+import { AdminRole, AdminUser } from '../users/admin-user.entity.js';
+import { ALL_APP_SECTIONS } from '../users/app-section.js';
 import { validateTelegramWebAppData } from '../common/telegram/web-app-auth.util.js';
 
 @Injectable()
@@ -25,13 +26,13 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Неверный логин или пароль');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Неверный логин или пароль');
     }
 
     const { password_hash, ...result } = user;
@@ -39,10 +40,15 @@ export class AuthService {
   }
 
   async login(user: Omit<AdminUser, 'password_hash'>): Promise<{ access_token: string }> {
+    const allowedSections =
+      user.role === AdminRole.ADMIN
+        ? ALL_APP_SECTIONS
+        : (user.allowed_sections ?? []);
     const payload = {
       sub: user.id,
       username: user.username,
       role: user.role,
+      allowed_sections: allowedSections,
     };
 
     return {

@@ -65,8 +65,12 @@ export class AlertsService {
     todayStart.setHours(0, 0, 0, 0);
 
     const balance = await this.getEffectiveBalance(clientId);
+    const threshold =
+      client.balance_alert_threshold != null
+        ? parseFloat(client.balance_alert_threshold)
+        : null;
 
-    if (balance > 0) {
+    if (balance > 0 && (threshold == null || balance >= threshold)) {
       return;
     }
 
@@ -85,7 +89,7 @@ export class AlertsService {
     await this.telegramService.sendLowBalanceAlert({
       clientName: client.name,
       currentBalance: balance,
-      threshold: 0,
+      threshold: threshold ?? 0,
       currency: 'USD',
     });
 

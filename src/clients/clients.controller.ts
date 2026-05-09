@@ -15,8 +15,8 @@ import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
-import { AdminRole } from '../users/admin-user.entity.js';
+import { Sections } from '../common/decorators/roles.decorator.js';
+import { AppSection } from '../users/app-section.js';
 
 @Controller('clients')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -34,19 +34,19 @@ export class ClientsController {
   }
 
   @Post()
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.CLIENTS)
   async create(@Body() dto: CreateClientDto) {
     return this.clientsService.create(dto);
   }
 
   @Patch(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.CLIENTS)
   async update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
     return this.clientsService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.CLIENTS)
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id') id: string) {
     return this.clientsService.remove(id);

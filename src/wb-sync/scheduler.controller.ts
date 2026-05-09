@@ -8,14 +8,14 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
-import { AdminRole } from '../users/admin-user.entity.js';
+import { Sections } from '../common/decorators/roles.decorator.js';
+import { AppSection } from '../users/app-section.js';
 import { SchedulerService } from './scheduler.service.js';
 import { SCHEDULER_JOBS, isSchedulerJobId } from './scheduler-jobs.js';
 
 @Controller('wb/scheduler')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(AdminRole.ADMIN)
+@Sections(AppSection.SETTINGS)
 export class SchedulerController {
   constructor(private readonly schedulerService: SchedulerService) {}
 

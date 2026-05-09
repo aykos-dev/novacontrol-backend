@@ -13,12 +13,12 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
-import { AdminRole } from './admin-user.entity.js';
+import { Sections } from '../common/decorators/roles.decorator.js';
+import { AppSection } from './app-section.js';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(AdminRole.ADMIN)
+@Sections(AppSection.USERS)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

@@ -31,7 +31,7 @@ export class SchedulerService implements OnModuleInit {
   onModuleInit(): void {
     const syncCron = this.configService.get<string>(
       'SYNC_CRON_SCHEDULE',
-      '*/5 * * * *',
+      '*/30 * * * *',
     );
     const dailyReportCron = this.configService.get<string>(
       'DAILY_REPORT_TIME',

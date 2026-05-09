@@ -16,9 +16,9 @@ import { CreateIncomeDto } from './dto/create-income.dto.js';
 import { UpdateIncomeDto } from './dto/update-income.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
+import { Sections } from '../common/decorators/roles.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
-import { AdminRole } from '../users/admin-user.entity.js';
+import { AppSection } from '../users/app-section.js';
 
 @Controller('incomes')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -61,7 +61,7 @@ export class IncomesController {
   }
 
   @Post()
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.FINANCE)
   create(
     @Body() dto: CreateIncomeDto,
     @CurrentUser() user: { id: string },
@@ -70,13 +70,13 @@ export class IncomesController {
   }
 
   @Patch(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.FINANCE)
   update(@Param('id') id: string, @Body() dto: UpdateIncomeDto) {
     return this.incomesService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.FINANCE)
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.incomesService.remove(id);

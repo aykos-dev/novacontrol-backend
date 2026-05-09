@@ -27,7 +27,7 @@ export class BotInternalController {
     const from = dateFrom?.trim();
     const to = dateTo?.trim();
     if (!from || !to) {
-      return { text: 'Укажите dateFrom и dateTo (YYYY-MM-DD).' };
+      return { text: 'Укажите dateFrom и dateTo (DD-MM-YYYY).' };
     }
     const text = await this.botService.buildReportText(from, to, client);
     return { text };

@@ -7,6 +7,7 @@ import {
   DeleteDateColumn,
   Index,
 } from 'typeorm';
+import { AppSection } from './app-section.js';
 
 export enum AdminRole {
   ADMIN = 'ADMIN',
@@ -37,6 +38,9 @@ export class AdminUser {
 
   @Column({ type: 'enum', enum: AdminRole, default: AdminRole.VIEWER })
   role!: AdminRole;
+
+  @Column({ type: 'simple-array', nullable: true })
+  allowed_sections!: AppSection[] | null;
 
   @Column({ type: 'bigint', nullable: true })
   telegram_id!: string | null;

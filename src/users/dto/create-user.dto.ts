@@ -1,5 +1,6 @@
-import { IsString, IsOptional, IsEnum, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsArray } from 'class-validator';
 import { AdminRole } from '../admin-user.entity.js';
+import { AppSection } from '../app-section.js';
 
 export class CreateUserDto {
   @IsString()
@@ -18,4 +19,9 @@ export class CreateUserDto {
   @IsOptional()
   @IsNumber()
   telegram_id?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(AppSection, { each: true })
+  allowed_sections?: AppSection[];
 }

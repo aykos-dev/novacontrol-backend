@@ -27,6 +27,23 @@ const WB_BREAKDOWN: {
   { key: 'acceptance', label: 'Операции при приемке' },
 ];
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DISPLAY_DATE_RE = /^\d{2}-\d{2}-\d{4}$/;
+
+function isoToDisplay(date: string): string {
+  if (!ISO_DATE_RE.test(date)) return date;
+  const [year, month, day] = date.split('-');
+  return `${day}-${month}-${year}`;
+}
+
+function displayToIso(date: string): string {
+  if (DISPLAY_DATE_RE.test(date)) {
+    const [day, month, year] = date.split('-');
+    return `${year}-${month}-${day}`;
+  }
+  return date;
+}
+
 @Injectable()
 export class BotService {
   constructor(
@@ -60,8 +77,9 @@ export class BotService {
   }
 
   private resolveDate(dateArg?: string): string {
-    return dateArg && /^\d{4}-\d{2}-\d{2}$/.test(dateArg)
-      ? dateArg
+    const normalized = dateArg ? displayToIso(dateArg) : undefined;
+    return normalized && ISO_DATE_RE.test(normalized)
+      ? normalized
       : this.currentDate();
   }
 
@@ -101,8 +119,8 @@ export class BotService {
 
     const singleDay = dateFrom === dateTo;
     const header = singleDay
-      ? `📊 Отчёт за ${dateFrom}`
-      : `📊 Отчёт за ${dateFrom} — ${dateTo}`;
+      ? `📊 Отчёт за ${isoToDisplay(dateFrom)}`
+      : `📊 Отчёт за ${isoToDisplay(dateFrom)} — ${isoToDisplay(dateTo)}`;
 
     const blocks: string[] = [header, ''];
 
@@ -182,12 +200,12 @@ export class BotService {
       await this.expensesService.getExpenseCategoryReportByClient(date);
 
     if (clientReports.length === 0) {
-      return [`📅  Отчёт за ${date}`, '', 'Доп. расходов за день нет.'].join(
+      return [`📅  Отчёт за ${isoToDisplay(date)}`, '', 'Доп. расходов за день нет.'].join(
         '\n',
       );
     }
 
-    const blocks: string[] = [`📅  Отчёт за ${date}`];
+    const blocks: string[] = [`📅  Отчёт за ${isoToDisplay(date)}`];
 
     for (const client of clientReports) {
       blocks.push('');
@@ -214,7 +232,7 @@ export class BotService {
       return 'Нет активных клиентов.';
     }
 
-    const blocks: string[] = [`📅  Отчёт за ${date}`];
+    const blocks: string[] = [`📅  Отчёт за ${isoToDisplay(date)}`];
 
     for (const client of clients) {
       const todayIncomes = await this.incomesService.findEntriesByClientForDate(
@@ -271,7 +289,7 @@ export class BotService {
       return 'Нет активных клиентов.';
     }
 
-    const blocks: string[] = [`📅 Отчёт за ${date}`];
+    const blocks: string[] = [`📅 Отчёт за ${isoToDisplay(date)}`];
 
     for (const client of clients) {
       const incomeSummary = await this.incomesService.getSummary(
@@ -299,18 +317,14 @@ export class BotService {
     return blocks.join('\n');
   }
 
-  /** Net extra expenses (KGS) for one day; date defaults to UTC today (YYYY-MM-DD). */
+  /** Net extra expenses (KGS) for one day; date defaults to today, input may be DD-MM-YYYY. */
   async buildExtraExpenseDayText(dateArg?: string): Promise<string> {
-    const re = /^\d{4}-\d{2}-\d{2}$/;
-    const date =
-      dateArg && re.test(dateArg)
-        ? dateArg
-        : new Date().toISOString().slice(0, 10);
+    const date = this.resolveDate(dateArg);
     const total = await this.expensesService.sumExtraExpensesKgs({
       expenseDate: date,
     });
     return [
-      `📦 Доп. расходы за ${date}`,
+      `📦 Доп. расходы за ${isoToDisplay(date)}`,
       `💵 Итого (нетто, KGS): ${this.fmt(total)}`,
     ].join('\n');
   }

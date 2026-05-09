@@ -15,8 +15,8 @@ import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto.js';
 import { UpdateExpenseCategoryDto } from './dto/update-expense-category.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { Roles } from '../common/decorators/roles.decorator.js';
-import { AdminRole } from '../users/admin-user.entity.js';
+import { Sections } from '../common/decorators/roles.decorator.js';
+import { AppSection } from '../users/app-section.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 
 @Controller('expense-categories')
@@ -30,13 +30,13 @@ export class ExpenseCategoriesController {
   }
 
   @Get('admin')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.EXPENSE_CATEGORIES)
   findAllAdmin() {
     return this.categoriesService.findAll();
   }
 
   @Post()
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.EXPENSE_CATEGORIES)
   create(
     @Body() dto: CreateExpenseCategoryDto,
     @CurrentUser() user: { id: string },
@@ -45,13 +45,13 @@ export class ExpenseCategoriesController {
   }
 
   @Patch(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.EXPENSE_CATEGORIES)
   update(@Param('id') id: string, @Body() dto: UpdateExpenseCategoryDto) {
     return this.categoriesService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles(AdminRole.ADMIN)
+  @Sections(AppSection.EXPENSE_CATEGORIES)
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.categoriesService.remove(id);
